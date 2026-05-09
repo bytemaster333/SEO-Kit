@@ -1,0 +1,5 @@
+# Managed by Ansible — starknet_ops.node_toolkit (base role)
+# Format: <domain> <type> <item> <value>
+{% for limit in base_ulimits %}
+{{ limit.domain }} {{ limit.limit_type }} {{ limit.limit_item }} {{ limit.value }}
+{% endfor %}

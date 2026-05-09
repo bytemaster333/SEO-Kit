@@ -1,0 +1,56 @@
+---
+- name: "Install | Ensure pathfinder data directory exists"
+  ansible.builtin.file:
+    path: "{{ pathfinder_data_dir }}"
+    owner: "{{ pathfinder_user }}"
+    group: "{{ pathfinder_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Install | Check currently installed pathfinder version"
+  ansible.builtin.command: "{{ pathfinder_binary }} --version"
+  register: pathfinder_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: "Install | Determine if install or upgrade is needed"
+  ansible.builtin.set_fact:
+    pathfinder_needs_install: >-
+      {{ pathfinder_installed_version.rc != 0 or
+         pathfinder_version not in pathfinder_installed_version.stdout }}
+
+- name: "Install | Download pathfinder release tarball"
+  ansible.builtin.get_url:
+    url: "{{ pathfinder_binary_url }}"
+    dest: "/tmp/pathfinder-{{ pathfinder_version }}.tar.gz"
+    checksum: "{{ 'sha256:' + pathfinder_checksum if pathfinder_checksum else omit }}"
+    mode: "0600"
+    timeout: 180
+  when: pathfinder_needs_install | bool
+
+- name: "Install | Extract pathfinder binary"
+  ansible.builtin.unarchive:
+    src: "/tmp/pathfinder-{{ pathfinder_version }}.tar.gz"
+    dest: /tmp/
+    remote_src: true
+  when: pathfinder_needs_install | bool
+
+- name: "Install | Place pathfinder binary at final location"
+  ansible.builtin.copy:
+    src: /tmp/pathfinder
+    dest: "{{ pathfinder_binary }}"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  when: pathfinder_needs_install | bool
+  notify: restart pathfinder
+
+- name: "Install | Remove temporary download artifacts"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/pathfinder-{{ pathfinder_version }}.tar.gz"
+    - /tmp/pathfinder
+  when: pathfinder_needs_install | bool

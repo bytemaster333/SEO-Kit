@@ -1,0 +1,12 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  tasks:
+    - name: Include base role first
+      ansible.builtin.include_role:
+        name: starknet_ops.node_toolkit.base
+
+    - name: Include pathfinder role
+      ansible.builtin.include_role:
+        name: starknet_ops.node_toolkit.pathfinder

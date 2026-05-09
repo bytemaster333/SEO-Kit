@@ -1,0 +1,26 @@
+---
+- name: "Ufw | Set default incoming policy to deny"
+  community.general.ufw:
+    default: "{{ base_ufw_default_incoming }}"
+    direction: incoming
+
+- name: "Ufw | Set default outgoing policy to allow"
+  community.general.ufw:
+    default: "{{ base_ufw_default_outgoing }}"
+    direction: outgoing
+
+- name: "Ufw | Apply base and extra firewall rules"
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    src: "{{ item.src | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ base_ufw_rules + base_ufw_extra_rules }}"
+  loop_control:
+    label: "{{ item.comment | default(item.port | default('rule')) }}"
+
+- name: "Ufw | Enable UFW with logging"
+  community.general.ufw:
+    logging: "{{ base_ufw_logging }}"
+    state: enabled

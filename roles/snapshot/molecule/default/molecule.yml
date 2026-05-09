@@ -1,0 +1,67 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/../../../../requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: snapshot-ubuntu2204
+    image: geerlingguy/docker-ubuntu2204-ansible:latest
+    pre_build_image: true
+    privileged: false
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    command: /lib/systemd/systemd
+    capabilities:
+      - SYS_ADMIN
+      - NET_ADMIN
+    tmpfs:
+      - /run
+      - /run/lock
+
+  - name: snapshot-debian12
+    image: geerlingguy/docker-debian12-ansible:latest
+    pre_build_image: true
+    privileged: false
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    command: /lib/systemd/systemd
+    capabilities:
+      - SYS_ADMIN
+      - NET_ADMIN
+    tmpfs:
+      - /run
+      - /run/lock
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      callback_whitelist: profile_tasks, timer
+    ssh_connection:
+      pipelining: true
+  inventory:
+    group_vars:
+      all:
+        # Reorg check requires a running node — skip in Molecule; test logic separately
+        snapshot_mode: backup
+        snapshot_s3_enabled: false
+        snapshot_node_type: pathfinder
+        snapshot_rpc_port: 9545
+        snapshot_data_dir: /var/lib/pathfinder
+        snapshot_service_name: pathfinder
+        snapshot_local_staging_dir: /tmp/snapshot-test
+
+verifier:
+  name: ansible
+
+lint: |
+  set -e
+  yamllint .
+  ansible-lint

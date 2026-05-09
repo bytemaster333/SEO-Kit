@@ -1,0 +1,20 @@
+---
+- name: "Base | Install prerequisite packages"
+  ansible.builtin.import_tasks: packages.yml
+  tags: [base, packages]
+
+- name: "Base | Create service users"
+  ansible.builtin.import_tasks: users.yml
+  tags: [base, users]
+
+- name: "Base | Apply sysctl hardening"
+  ansible.builtin.import_tasks: sysctl.yml
+  tags: [base, sysctl, hardening]
+
+- name: "Base | Configure ulimits"
+  ansible.builtin.import_tasks: ulimits.yml
+  tags: [base, ulimits, hardening]
+
+- name: "Base | Configure UFW firewall"
+  ansible.builtin.import_tasks: firewall.yml
+  tags: [base, ufw, firewall]

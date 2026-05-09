@@ -1,0 +1,32 @@
+---
+- name: "Install | Ensure juno data directory exists"
+  ansible.builtin.file:
+    path: "{{ juno_data_dir }}"
+    owner: "{{ juno_user }}"
+    group: "{{ juno_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Install | Check currently installed juno version"
+  ansible.builtin.command: "{{ juno_binary }} version"
+  register: juno_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: "Install | Determine if install or upgrade is needed"
+  ansible.builtin.set_fact:
+    juno_needs_install: >-
+      {{ juno_installed_version.rc != 0 or
+         juno_version not in juno_installed_version.stdout }}
+
+- name: "Install | Download juno binary directly from GitHub releases"
+  ansible.builtin.get_url:
+    url: "{{ juno_binary_url }}"
+    dest: "{{ juno_binary }}"
+    checksum: "{{ 'sha256:' + juno_checksum if juno_checksum else omit }}"
+    owner: root
+    group: root
+    mode: "0755"
+    timeout: 180
+  when: juno_needs_install | bool
+  notify: restart juno

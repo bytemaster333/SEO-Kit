@@ -1,0 +1,89 @@
+---
+# L1-L2 Divergence Check for Juno — mirrors pathfinder/tasks/l1_health_check.yml
+# Juno RPC path: POST http://host:port/ (JSON-RPC 2.0)
+
+- name: "L1_check | Wait for Juno HTTP RPC to be responsive"
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ juno_http_port }}"
+    timeout: 60
+    delay: 5
+
+- name: "L1_check | Query L1 Ethereum current block number"
+  ansible.builtin.uri:
+    url: "{{ juno_ethereum_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: eth_blockNumber
+      params: []
+      id: 1
+    headers:
+      Content-Type: "application/json"
+    return_content: true
+    timeout: "{{ juno_health_check_timeout }}"
+  register: juno_l1_block_response
+  failed_when:
+    - juno_l1_block_response.status != 200
+    - juno_l1_block_response.json.error is defined
+
+- name: "L1_check | Parse L1 block number and latency"
+  ansible.builtin.set_fact:
+    juno_l1_block_number: "{{ juno_l1_block_response.json.result | int(base=16) }}"
+    juno_l1_latency_ms: "{{ (juno_l1_block_response.elapsed.total_seconds() * 1000) | round | int }}"
+
+- name: "L1_check | Assert valid L1 block number"
+  ansible.builtin.assert:
+    that:
+      - juno_l1_block_number | int > 0
+    fail_msg: "L1 RPC returned invalid block number: {{ juno_l1_block_number }}"
+
+- name: "L1_check | Warn if L1 RPC latency is high"
+  ansible.builtin.debug:
+    msg: "WARNING: L1 RPC response time is {{ juno_l1_latency_ms }}ms — high latency detected"
+  when: juno_l1_latency_ms | int > 2000
+
+- name: "L1_check | Query Juno starknet_syncing"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ juno_http_port }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: starknet_syncing
+      params: []
+      id: 2
+    return_content: true
+    timeout: "{{ juno_health_check_timeout }}"
+  register: juno_sync_response
+
+- name: "L1_check | Parse Juno sync state"
+  ansible.builtin.set_fact:
+    juno_is_syncing: "{{ juno_sync_response.json.result is mapping }}"
+    juno_highest_known_l1_block: >-
+      {{ (juno_sync_response.json.result.highest_block_num
+          | default(juno_l1_block_number)) | int }}
+
+- name: "L1_check | Calculate L1-L2 lag"
+  ansible.builtin.set_fact:
+    juno_l1_l2_lag: "{{ (juno_l1_block_number | int) - (juno_highest_known_l1_block | int) }}"
+
+- name: "L1_check | Report sync status"
+  ansible.builtin.debug:
+    msg: >
+      Juno health — L1 head: {{ juno_l1_block_number }},
+      Juno L1 knowledge: {{ juno_highest_known_l1_block }},
+      Lag: {{ juno_l1_l2_lag }} blocks, Syncing: {{ juno_is_syncing }}
+
+- name: "L1_check | Warn on elevated L1-L2 lag"
+  ansible.builtin.debug:
+    msg: "WARNING: L1-L2 lag {{ juno_l1_l2_lag }} blocks exceeds warn threshold {{ juno_l1_lag_warn_threshold }}"
+  when: juno_l1_l2_lag | int > juno_l1_lag_warn_threshold | int
+
+- name: "L1_check | Fail on critical L1-L2 lag"
+  ansible.builtin.fail:
+    msg: >
+      CRITICAL: L1-L2 lag {{ juno_l1_l2_lag }} blocks exceeds failure threshold
+      {{ juno_l1_lag_fail_threshold }}. Check: journalctl -u juno -n 100
+  when: juno_l1_l2_lag | int > juno_l1_lag_fail_threshold | int

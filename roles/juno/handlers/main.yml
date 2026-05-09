@@ -1,0 +1,12 @@
+---
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: reload systemd daemon
+
+- name: Restart juno
+  ansible.builtin.systemd:
+    name: "{{ juno_service_name }}"
+    state: restarted
+  listen: restart juno
+  when: juno_service_state != 'stopped'

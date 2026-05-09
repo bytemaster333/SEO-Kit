@@ -1,0 +1,42 @@
+---
+- name: "Juno | Validate required variables"
+  ansible.builtin.assert:
+    that:
+      - juno_ethereum_url | length > 0
+    fail_msg: >
+      juno_ethereum_url is required but not set.
+      Provide the L1 Ethereum RPC URL via inventory group_vars
+      or an ansible-vault encrypted vars file.
+  tags: [juno, validate]
+
+# UFW rules are applied directly here (not via base role) so the role is
+# self-contained: it works whether base ran before, after, or not at all.
+# UFW is idempotent — re-applying the same rule produces no change.
+- name: "Juno | Apply UFW rules for RPC and P2P ports"
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    src: "{{ item.src | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ juno_ufw_allow_rules }}"
+  loop_control:
+    label: "{{ item.comment | default(item.port) }}"
+  tags: [juno, firewall]
+
+- name: "Juno | Install binary"
+  ansible.builtin.import_tasks: install.yml
+  tags: [juno, install]
+
+- name: "Juno | Configure environment"
+  ansible.builtin.import_tasks: configure.yml
+  tags: [juno, configure]
+
+- name: "Juno | Deploy and start systemd service"
+  ansible.builtin.import_tasks: service.yml
+  tags: [juno, systemd]
+
+- name: "Juno | Run L1-L2 health check"
+  ansible.builtin.import_tasks: l1_health_check.yml
+  when: juno_health_check_enabled | bool
+  tags: [juno, health]

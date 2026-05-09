@@ -1,0 +1,67 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/../../../../requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: pathfinder-ubuntu2204
+    image: geerlingguy/docker-ubuntu2204-ansible:latest
+    pre_build_image: true
+    privileged: false
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    command: /lib/systemd/systemd
+    capabilities:
+      - SYS_ADMIN
+      - NET_ADMIN
+    tmpfs:
+      - /run
+      - /run/lock
+
+  - name: pathfinder-debian12
+    image: geerlingguy/docker-debian12-ansible:latest
+    pre_build_image: true
+    privileged: false
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    command: /lib/systemd/systemd
+    capabilities:
+      - SYS_ADMIN
+      - NET_ADMIN
+    tmpfs:
+      - /run
+      - /run/lock
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      callback_whitelist: profile_tasks, timer
+    ssh_connection:
+      pipelining: true
+  inventory:
+    group_vars:
+      all:
+        # L1 health check disabled in Molecule — no real L1 RPC available
+        pathfinder_health_check_enabled: false
+        # Use a placeholder URL to satisfy the assert validation
+        pathfinder_ethereum_url: "http://mock-l1-rpc.test:8545"
+        pathfinder_network: sepolia
+        pathfinder_version: "0.14.3"
+        # Keep service enabled but do not start — stub binary cannot serve RPC
+        pathfinder_service_state: stopped
+
+verifier:
+  name: ansible
+
+lint: |
+  set -e
+  yamllint .
+  ansible-lint

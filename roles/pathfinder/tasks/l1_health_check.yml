@@ -1,0 +1,154 @@
+---
+# ============================================================
+# L1-L2 DIVERGENCE HEALTH CHECK
+#
+# 1. Wait for the local Pathfinder RPC to be reachable
+# 2. Query L1 Ethereum (eth_blockNumber) — measure latency
+# 3. Query Pathfinder (starknet_syncing) for L2 sync state
+# 4. Compute drift:
+#       fully synced  → 0
+#       syncing       → highest_block_num - current_block_num
+# 5. Apply warn / fail thresholds
+# ============================================================
+
+- name: "L1_check | Wait for Pathfinder RPC to be responsive"
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ pathfinder_rpc_port }}"
+    timeout: 60
+    delay: 5
+    msg: "Pathfinder RPC port {{ pathfinder_rpc_port }} did not open in time"
+
+- name: "L1_check | Query L1 Ethereum eth_blockNumber (with retries)"
+  ansible.builtin.uri:
+    url: "{{ pathfinder_ethereum_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: eth_blockNumber
+      params: []
+      id: 1
+    headers:
+      Content-Type: "application/json"
+    return_content: true
+    timeout: "{{ pathfinder_health_check_timeout }}"
+    status_code: [200]
+  register: pathfinder_l1_block_response
+  retries: "{{ pathfinder_health_check_retries }}"
+  delay: "{{ pathfinder_health_check_retry_delay }}"
+  until:
+    - pathfinder_l1_block_response.status | default(0) == 200
+    - pathfinder_l1_block_response.json is defined
+    - pathfinder_l1_block_response.json.result is defined
+    - pathfinder_l1_block_response.json.error is not defined
+  failed_when: >
+    pathfinder_l1_block_response.status | default(0) != 200
+    or pathfinder_l1_block_response.json is not defined
+    or pathfinder_l1_block_response.json.error is defined
+    or pathfinder_l1_block_response.json.result is not defined
+
+- name: "L1_check | Parse L1 block number and measure latency"
+  ansible.builtin.set_fact:
+    pathfinder_l1_block_number: "{{ pathfinder_l1_block_response.json.result | int(base=16) }}"
+    pathfinder_l1_latency_ms: >-
+      {{ (pathfinder_l1_block_response.elapsed.total_seconds() * 1000) | round | int }}
+
+- name: "L1_check | Assert L1 RPC returned a valid block number"
+  ansible.builtin.assert:
+    that:
+      - pathfinder_l1_block_number | int > 0
+    fail_msg: >
+      L1 RPC at {{ pathfinder_ethereum_url }} returned an invalid block number
+      ({{ pathfinder_l1_block_number }}). Check L1 RPC connectivity.
+
+- name: "L1_check | Warn if L1 RPC latency is high"
+  ansible.builtin.debug:
+    msg: >
+      WARNING: L1 RPC response time is {{ pathfinder_l1_latency_ms }}ms
+      (warn threshold: {{ pathfinder_l1_latency_warn_ms }}ms).
+      High latency may delay L1-L2 confirmations.
+  when: (pathfinder_l1_latency_ms | int) > (pathfinder_l1_latency_warn_ms | int)
+
+- name: "L1_check | Query Pathfinder starknet_syncing (with retries)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ pathfinder_rpc_port }}/rpc/v0_7"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: starknet_syncing
+      params: []
+      id: 2
+    return_content: true
+    timeout: "{{ pathfinder_health_check_timeout }}"
+    status_code: [200]
+  register: pathfinder_sync_response
+  retries: "{{ pathfinder_health_check_retries }}"
+  delay: "{{ pathfinder_health_check_retry_delay }}"
+  until:
+    - pathfinder_sync_response.status | default(0) == 200
+    - pathfinder_sync_response.json is defined
+    - pathfinder_sync_response.json.error is not defined
+  failed_when: >
+    pathfinder_sync_response.status | default(0) != 200
+    or pathfinder_sync_response.json is not defined
+    or pathfinder_sync_response.json.error is defined
+
+# starknet_syncing returns:
+#   - false           — node is fully synced
+#   - { current_block_num, highest_block_num, ... } — node is syncing
+- name: "L1_check | Parse Pathfinder sync state"
+  ansible.builtin.set_fact:
+    pathfinder_is_syncing: "{{ pathfinder_sync_response.json.result is mapping }}"
+    pathfinder_l2_current_block: >-
+      {{ (pathfinder_sync_response.json.result.current_block_num | default(0)) | int
+         if pathfinder_sync_response.json.result is mapping else 0 }}
+    pathfinder_l2_highest_block: >-
+      {{ (pathfinder_sync_response.json.result.highest_block_num | default(0)) | int
+         if pathfinder_sync_response.json.result is mapping else 0 }}
+
+- name: "L1_check | Calculate L1-L2 sync drift"
+  ansible.builtin.set_fact:
+    pathfinder_l1_l2_lag: >-
+      {{ ((pathfinder_l2_highest_block | int) - (pathfinder_l2_current_block | int))
+         if (pathfinder_is_syncing | bool) else 0 }}
+
+- name: "L1_check | Report sync status"
+  ansible.builtin.debug:
+    msg: >
+      Pathfinder health summary —
+      L1 head: {{ pathfinder_l1_block_number }},
+      L2 current: {{ pathfinder_l2_current_block }},
+      L2 highest known: {{ pathfinder_l2_highest_block }},
+      Sync drift: {{ pathfinder_l1_l2_lag }} block(s),
+      Syncing: {{ pathfinder_is_syncing }},
+      L1 latency: {{ pathfinder_l1_latency_ms }}ms
+
+- name: "L1_check | Warn on elevated sync drift"
+  ansible.builtin.debug:
+    msg: >
+      WARNING: Pathfinder is {{ pathfinder_l1_l2_lag }} blocks behind chain tip
+      (warn threshold: {{ pathfinder_l1_lag_warn_threshold }}).
+      Node may still be catching up — this is normal on first run.
+  when:
+    - (pathfinder_l1_l2_lag | int) > (pathfinder_l1_lag_warn_threshold | int)
+    - (pathfinder_l1_l2_lag | int) <= (pathfinder_l1_lag_fail_threshold | int)
+
+- name: "L1_check | Fail on critical sync drift"
+  ansible.builtin.fail:
+    msg: >
+      CRITICAL: Sync drift of {{ pathfinder_l1_l2_lag }} blocks exceeds the
+      failure threshold of {{ pathfinder_l1_lag_fail_threshold }}.
+      Investigate L1 RPC health, network, and Pathfinder logs:
+      journalctl -u {{ pathfinder_service_name }} -n 100
+  when: (pathfinder_l1_l2_lag | int) > (pathfinder_l1_lag_fail_threshold | int)
+
+- name: "L1_check | Confirm node is healthy"
+  ansible.builtin.debug:
+    msg: >
+      Pathfinder L1-L2 health check PASSED.
+      Synced: {{ not (pathfinder_is_syncing | bool) }},
+      drift: {{ pathfinder_l1_l2_lag }} block(s),
+      L1 latency: {{ pathfinder_l1_latency_ms }}ms.
+  when: (pathfinder_l1_l2_lag | int) <= (pathfinder_l1_lag_warn_threshold | int)

@@ -1,0 +1,13 @@
+---
+# Pathfinder-specific group vars — copy to pathfinder_nodes.yml
+
+pathfinder_version: "0.14.3"
+pathfinder_network: mainnet
+pathfinder_rpc_port: 9545
+pathfinder_metrics_port: 9101
+pathfinder_health_check_enabled: true
+
+snapshot_node_type: pathfinder
+snapshot_rpc_port: "{{ pathfinder_rpc_port }}"
+snapshot_data_dir: "{{ pathfinder_data_dir }}"
+snapshot_service_name: "{{ pathfinder_service_name }}"

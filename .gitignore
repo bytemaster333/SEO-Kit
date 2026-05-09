@@ -1,0 +1,34 @@
+# Ansible vault password files
+.vault_pass
+*.vault_pass
+vault_password_file
+
+# Ansible runtime cache (created by ansible-lint / ansible-galaxy)
+.ansible/
+
+# Molecule ephemeral state
+roles/*/molecule/*/.cache/
+roles/*/molecule/*/molecule.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.tox/
+
+# Collection build artifacts
+*.tar.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Inventory with real credentials (use .example templates)
+inventory/hosts.yml
+inventory/group_vars/all.yml
+inventory/group_vars/pathfinder_nodes.yml
+inventory/group_vars/juno_nodes.yml

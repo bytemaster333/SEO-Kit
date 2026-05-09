@@ -1,0 +1,53 @@
+---
+# Health validation playbook — run without making changes
+# Usage:
+#   ansible-playbook playbooks/validate.yml \
+#     -i inventory/hosts.yml \
+#     -e @inventory/group_vars/vault.yml \
+#     --vault-id default@prompt
+
+- name: Validate Pathfinder node health
+  hosts: pathfinder_nodes
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "validate | Check pathfinder service status"
+      ansible.builtin.systemd:
+        name: pathfinder
+      register: pf_status
+
+    - name: "validate | Assert pathfinder is active"
+      ansible.builtin.assert:
+        that:
+          - pf_status.status.ActiveState == 'active'
+        fail_msg: "pathfinder service is not active: {{ pf_status.status.ActiveState }}"
+
+    - name: "validate | Run L1-L2 divergence check"
+      ansible.builtin.import_role:
+        name: starknet_ops.node_toolkit.pathfinder
+        tasks_from: l1_health_check.yml
+      when: pathfinder_health_check_enabled | default(true) | bool
+
+- name: Validate Juno node health
+  hosts: juno_nodes
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "validate | Check juno service status"
+      ansible.builtin.systemd:
+        name: juno
+      register: juno_status
+
+    - name: "validate | Assert juno is active"
+      ansible.builtin.assert:
+        that:
+          - juno_status.status.ActiveState == 'active'
+        fail_msg: "juno service is not active: {{ juno_status.status.ActiveState }}"
+
+    - name: "validate | Run L1-L2 divergence check"
+      ansible.builtin.import_role:
+        name: starknet_ops.node_toolkit.juno
+        tasks_from: l1_health_check.yml
+      when: juno_health_check_enabled | default(true) | bool

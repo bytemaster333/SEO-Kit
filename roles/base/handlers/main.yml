@@ -1,0 +1,12 @@
+---
+- name: Reload sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+  listen: reload sysctl
+  when: ansible_virtualization_type not in ['docker', 'container', 'lxc', 'podman']
+
+- name: Restart ufw
+  ansible.builtin.service:
+    name: ufw
+    state: restarted
+  listen: restart ufw

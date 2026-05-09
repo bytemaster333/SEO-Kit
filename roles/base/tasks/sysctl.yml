@@ -1,0 +1,24 @@
+---
+- name: "Sysctl | Deploy hardening configuration file"
+  ansible.builtin.template:
+    src: sysctl-starknet.conf.j2
+    dest: /etc/sysctl.d/90-starknet-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload sysctl
+
+# Live kernel apply is skipped in container environments where /proc/sys is
+# read-only (Docker, LXC). The config file above ensures settings are applied
+# on the next full system boot via sysctl --system.
+- name: "Sysctl | Apply all settings immediately"
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value | string }}"
+    sysctl_file: /etc/sysctl.d/90-starknet-hardening.conf
+    reload: true
+    state: present
+  loop: "{{ base_sysctl_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: ansible_virtualization_type not in ['docker', 'container', 'lxc', 'podman']

@@ -1,0 +1,195 @@
+---
+# ============================================================
+# REORG-AWARE PRE-SNAPSHOT CHAIN VERIFICATION
+#
+# Algorithm:
+#   1. Wait for the local node RPC to respond (pre-flight)
+#   2. Query the chain tip (starknet_blockNumber) with retries
+#   3. Guard: depth must not exceed available chain history
+#   4. Fetch the last N block headers (starknet_getBlockWithTxHashes)
+#   5. Reject any JSON-RPC errors in responses
+#   6. Verify every block has an accepted finality status
+#   7. Verify parent_hash continuity across all N blocks
+#   8. On any failure → ansible.builtin.fail (no snapshot taken)
+#   9. On success → set snapshot_chain_verified=true with block tag
+# ============================================================
+
+- name: "Reorg_check | Wait for node RPC to be responsive"
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ snapshot_rpc_port }}"
+    timeout: 60
+    delay: 2
+    msg: >
+      Node RPC port {{ snapshot_rpc_port }} did not open within 60s.
+      Cannot verify chain — aborting snapshot.
+
+- name: "Reorg_check | Query current block number (with retries)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ snapshot_rpc_port }}/rpc/v0_7"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: starknet_blockNumber
+      params: []
+      id: 10
+    return_content: true
+    timeout: "{{ snapshot_rpc_timeout }}"
+    status_code: [200]
+  register: snapshot_block_number_response
+  retries: "{{ snapshot_rpc_retries }}"
+  delay: "{{ snapshot_rpc_retry_delay }}"
+  until:
+    - snapshot_block_number_response.status == 200
+    - snapshot_block_number_response.json is defined
+    - snapshot_block_number_response.json.result is defined
+    - snapshot_block_number_response.json.error is not defined
+
+- name: "Reorg_check | Reject JSON-RPC error response on blockNumber"
+  ansible.builtin.fail:
+    msg: >
+      Node RPC returned a JSON-RPC error on starknet_blockNumber:
+      {{ snapshot_block_number_response.json.error | default('unknown error') }}.
+      Snapshot aborted.
+  when:
+    - snapshot_block_number_response.json.error is defined
+
+- name: "Reorg_check | Set current block number fact"
+  ansible.builtin.set_fact:
+    snapshot_current_block_num: "{{ snapshot_block_number_response.json.result | int }}"
+
+- name: "Reorg_check | Guard against insufficient chain history"
+  ansible.builtin.assert:
+    that:
+      - (snapshot_current_block_num | int) >= (snapshot_reorg_check_depth | int)
+    fail_msg: >
+      Chain tip ({{ snapshot_current_block_num }}) is below the configured
+      reorg_check_depth ({{ snapshot_reorg_check_depth }}). The node may not
+      be synced yet — refusing to take a snapshot.
+
+- name: "Reorg_check | Report chain tip"
+  ansible.builtin.debug:
+    msg: >
+      Chain tip is block {{ snapshot_current_block_num }}.
+      Verifying last {{ snapshot_reorg_check_depth }} blocks for reorg safety.
+
+- name: "Reorg_check | Compute block numbers to verify"
+  ansible.builtin.set_fact:
+    snapshot_blocks_to_check: >-
+      {{ range(
+           (snapshot_current_block_num | int) - (snapshot_reorg_check_depth | int) + 1,
+           (snapshot_current_block_num | int) + 1
+         ) | list }}
+
+- name: "Reorg_check | Fetch block headers for chain verification"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ snapshot_rpc_port }}/rpc/v0_7"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: starknet_getBlockWithTxHashes
+      params:
+        - block_number: "{{ item | int }}"
+      id: "{{ 100 + idx }}"
+    return_content: true
+    timeout: "{{ snapshot_rpc_timeout }}"
+    status_code: [200]
+  loop: "{{ snapshot_blocks_to_check }}"
+  loop_control:
+    index_var: idx
+    label: "block_{{ item }}"
+  register: snapshot_block_headers
+  retries: "{{ snapshot_rpc_retries }}"
+  delay: "{{ snapshot_rpc_retry_delay }}"
+  until:
+    - snapshot_block_headers is defined
+    - snapshot_block_headers.status | default(0) == 200
+    - snapshot_block_headers.json is defined
+    - snapshot_block_headers.json.result is defined
+    - snapshot_block_headers.json.error is not defined
+
+- name: "Reorg_check | Reject any block fetch with JSON-RPC error"
+  ansible.builtin.fail:
+    msg: >
+      Block fetch returned a JSON-RPC error for at least one block in
+      [{{ snapshot_blocks_to_check[0] }} .. {{ snapshot_blocks_to_check[-1] }}].
+      First error: {{ (snapshot_block_headers.results
+                       | selectattr('json.error', 'defined')
+                       | list | first).json.error | default('unknown') }}.
+      Snapshot aborted.
+  when:
+    - snapshot_block_headers.results
+      | selectattr('json.error', 'defined') | list | length > 0
+
+- name: "Reorg_check | Extract normalized block records"
+  ansible.builtin.set_fact:
+    snapshot_block_records: >-
+      {{ snapshot_block_headers.results
+         | map(attribute='json')
+         | map(attribute='result')
+         | list }}
+
+- name: "Reorg_check | Verify every block has required fields"
+  ansible.builtin.assert:
+    that:
+      - item.block_number is defined
+      - item.block_hash is defined
+      - item.parent_hash is defined
+      - item.status is defined
+    fail_msg: >
+      Block record is missing required fields (block_number, block_hash,
+      parent_hash, status). Got: {{ item.keys() | list }}.
+      Snapshot aborted.
+  loop: "{{ snapshot_block_records }}"
+  loop_control:
+    label: "block_{{ item.block_number | default('unknown') }}"
+
+- name: "Reorg_check | Verify all blocks have accepted finality status"
+  ansible.builtin.assert:
+    that:
+      - item.status in snapshot_accepted_statuses
+    fail_msg: >
+      SNAPSHOT ABORTED: Block {{ item.block_number }} has status '{{ item.status }}'.
+      Accepted statuses: {{ snapshot_accepted_statuses }}.
+      The chain may not be finalized — retry after more blocks are confirmed.
+    success_msg: "Block {{ item.block_number }} status {{ item.status }} — OK"
+  loop: "{{ snapshot_block_records }}"
+  loop_control:
+    label: "block_{{ item.block_number }}"
+  when: snapshot_reorg_abort_on_non_accepted | bool
+
+# Parent hash chain continuity — for each block at index i,
+# parent_hash must equal block_hash of block at index i-1
+- name: "Reorg_check | Verify parent_hash chain continuity"
+  ansible.builtin.assert:
+    that:
+      - snapshot_block_records[item | int].parent_hash ==
+        snapshot_block_records[(item | int) - 1].block_hash
+    fail_msg: >
+      REORG DETECTED: Block {{ snapshot_block_records[item | int].block_number }}
+      parent_hash ({{ snapshot_block_records[item | int].parent_hash[:16] }}...)
+      does NOT match block {{ snapshot_block_records[(item | int) - 1].block_number }}
+      block_hash ({{ snapshot_block_records[(item | int) - 1].block_hash[:16] }}...).
+      Snapshot ABORTED — capturing a reorged state would corrupt the backup.
+    success_msg: >
+      Chain link {{ item }}: block {{ snapshot_block_records[item | int].block_number }}
+      correctly references parent block {{ snapshot_block_records[(item | int) - 1].block_number }}
+  loop: "{{ range(1, snapshot_block_records | length) | list }}"
+  loop_control:
+    label: "chain_link_{{ item }}"
+
+- name: "Reorg_check | Tag snapshot with verified chain tip"
+  ansible.builtin.set_fact:
+    snapshot_verified_block_num: "{{ snapshot_block_records[-1].block_number }}"
+    snapshot_verified_block_hash: "{{ snapshot_block_records[-1].block_hash }}"
+    snapshot_chain_verified: true
+
+- name: "Reorg_check | Report clean verification result"
+  ansible.builtin.debug:
+    msg: >
+      Chain verification PASSED for {{ snapshot_reorg_check_depth }} blocks.
+      Snapshot tag: block={{ snapshot_verified_block_num }},
+      hash={{ snapshot_verified_block_hash[:16] }}...
+      Proceeding with backup.

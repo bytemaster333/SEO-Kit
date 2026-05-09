@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: snapshot
+  author: starknet_ops
+  description: >
+    Reorg-aware Starknet node snapshots with S3 upload.
+    Verifies chain integrity via starknet_getBlockWithTxHashes before backup.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - starknet
+    - snapshot
+    - backup
+    - recovery
+    - blockchain
+
+dependencies: []

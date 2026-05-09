@@ -1,0 +1,48 @@
+# Managed by Ansible — starknet_ops.node_toolkit (pathfinder role)
+[Unit]
+Description=Pathfinder Starknet Full Node
+After=network-online.target
+Wants=network-online.target
+Documentation=https://github.com/eqlabs/pathfinder
+
+[Service]
+Type=simple
+User={{ pathfinder_user }}
+Group={{ pathfinder_group }}
+WorkingDirectory={{ pathfinder_data_dir }}
+EnvironmentFile={{ pathfinder_env_dir }}/pathfinder.env
+
+ExecStart={{ pathfinder_binary }} \
+    --http-rpc {{ pathfinder_rpc_host }}:{{ pathfinder_rpc_port }} \
+    --monitor-address {{ pathfinder_metrics_host }}:{{ pathfinder_metrics_port }} \
+    --ethereum.url ${PATHFINDER_ETHEREUM_URL} \
+    --network {{ pathfinder_network }} \
+    --storage.state-tries-history archive
+
+Restart={{ pathfinder_restart_policy }}
+RestartSec={{ pathfinder_restart_sec }}
+TimeoutStopSec=120
+
+# systemd security hardening
+NoNewPrivileges={{ base_systemd_hardening.NoNewPrivileges | default('yes') }}
+PrivateTmp={{ base_systemd_hardening.PrivateTmp | default('yes') }}
+ProtectSystem={{ base_systemd_hardening.ProtectSystem | default('full') }}
+ProtectHome={{ base_systemd_hardening.ProtectHome | default('yes') }}
+ReadWritePaths={{ pathfinder_data_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictNamespaces=yes
+LockPersonality=yes
+# Disabled for Pathfinder: Rust musl allocator may trigger W^X violations
+MemoryDenyWriteExecute=no
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pathfinder
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+---
+# ---- Binary / Version ----
+juno_version: "0.12.5"
+juno_checksum: ""
+juno_binary_url: >-
+  https://github.com/NethermindEth/juno/releases/download/v{{ juno_version }}/juno-v{{ juno_version }}-linux-amd64
+juno_binary: /usr/local/bin/juno
+
+# ---- Runtime identity ----
+juno_user: juno
+juno_group: juno
+juno_data_dir: /var/lib/juno
+juno_config_dir: /etc/juno
+
+# ---- Network endpoints ----
+juno_http_enabled: true
+juno_http_host: "0.0.0.0"
+juno_http_port: 6060
+juno_ws_enabled: true
+juno_ws_host: "0.0.0.0"
+juno_ws_port: 6061
+juno_metrics_enabled: true
+juno_metrics_host: "127.0.0.1"
+juno_metrics_port: 9090
+# P2P
+juno_p2p_enabled: true
+juno_p2p_port: 60600
+
+# ---- Starknet network ----
+juno_network: mainnet  # mainnet | sepolia | integration
+
+# ---- L1 Ethereum RPC (REQUIRED — set via vault) ----
+juno_ethereum_url: ""
+
+# ---- systemd service ----
+juno_service_name: juno
+juno_service_state: started
+juno_service_enabled: true
+juno_restart_policy: on-failure
+juno_restart_sec: 10
+
+# ---- L1-L2 divergence health check ----
+juno_health_check_enabled: true
+juno_health_check_timeout: 10
+juno_l1_lag_warn_threshold: 100
+juno_l1_lag_fail_threshold: 500
+
+# ---- UFW rules registered with base role ----
+juno_ufw_allow_rules:
+  - rule: allow
+    port: "{{ juno_http_port }}"
+    proto: tcp
+    comment: "Juno HTTP RPC"
+  - rule: allow
+    port: "{{ juno_ws_port }}"
+    proto: tcp
+    comment: "Juno WebSocket RPC"
+  - rule: allow
+    port: "{{ juno_p2p_port }}"
+    proto: tcp
+    comment: "Juno P2P"

@@ -1,0 +1,38 @@
+---
+- name: Verify snapshot role
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "Verify | Zstd is installed"  # noqa: command-instead-of-module
+      ansible.builtin.command: zstd --version
+      register: snapshot_zstd_version
+      changed_when: false
+
+    - name: "Verify | Assert zstd available"
+      ansible.builtin.assert:
+        that:
+          - snapshot_zstd_version.rc == 0
+
+    - name: "Verify | Snapshot archive exists in staging"
+      ansible.builtin.stat:
+        path: /tmp/snapshot-test/test_snapshot.tar.zst
+      register: snapshot_archive
+
+    - name: "Verify | Assert snapshot archive created"
+      ansible.builtin.assert:
+        that:
+          - snapshot_archive.stat.exists
+          - snapshot_archive.stat.size > 0
+
+    - name: "Verify | Staging directory exists"
+      ansible.builtin.stat:
+        path: /tmp/snapshot-test
+      register: snapshot_staging_dir
+
+    - name: "Verify | Assert staging directory present"
+      ansible.builtin.assert:
+        that:
+          - snapshot_staging_dir.stat.exists
+          - snapshot_staging_dir.stat.isdir

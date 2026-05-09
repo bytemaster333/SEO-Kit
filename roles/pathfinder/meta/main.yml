@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: pathfinder
+  author: starknet_ops
+  description: Installs and manages the Pathfinder Starknet full node with L1 health checks
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - starknet
+    - pathfinder
+    - blockchain
+    - node
+
+dependencies: []

@@ -1,0 +1,125 @@
+---
+# Guard — only run after reorg_check has set snapshot_chain_verified
+- name: "Backup | Assert chain was verified before backup"
+  ansible.builtin.assert:
+    that:
+      - snapshot_chain_verified is defined
+      - snapshot_chain_verified | bool
+    fail_msg: >
+      backup.yml invoked without a successful reorg_check run.
+      This is a logic error — ensure reorg_check.yml runs first.
+
+- name: "Backup | Ensure local staging directory exists"
+  ansible.builtin.file:
+    path: "{{ snapshot_local_staging_dir }}"
+    owner: root
+    group: root
+    mode: "0755"
+    state: directory
+
+- name: "Backup | Build snapshot filename from verified block tag"
+  ansible.builtin.set_fact:
+    snapshot_filename: >-
+      {{ snapshot_node_type }}_block{{ snapshot_verified_block_num
+      }}_{{ snapshot_verified_block_hash[:16]
+      }}_{{ ansible_date_time.iso8601_basic_short }}.tar.zst
+
+- name: "Backup | Stop node service for consistent data snapshot"
+  ansible.builtin.systemd:
+    name: "{{ snapshot_service_name }}"
+    state: stopped
+  register: snapshot_service_was_stopped
+
+- name: "Backup | Create compressed snapshot archive (zstd)"  # noqa: command-instead-of-module
+  ansible.builtin.command: >
+    tar
+    --use-compress-program='zstd -T0 -3'
+    -cf {{ snapshot_local_staging_dir }}/{{ snapshot_filename }}
+    -C {{ snapshot_data_dir | dirname }}
+    {{ snapshot_data_dir | basename }}
+  args:
+    creates: "{{ snapshot_local_staging_dir }}/{{ snapshot_filename }}"
+  register: snapshot_archive_result
+
+- name: "Backup | Write snapshot manifest"
+  ansible.builtin.template:
+    src: snapshot-manifest.json.j2
+    dest: "{{ snapshot_local_staging_dir }}/{{ snapshot_filename }}.manifest.json"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "Backup | Restart node service after snapshot"  # noqa: no-handler
+  ansible.builtin.systemd:
+    name: "{{ snapshot_service_name }}"
+    state: started
+  when: snapshot_service_was_stopped.changed
+
+# ---- S3 Upload ----
+- name: "Backup | Upload snapshot archive to S3"
+  amazon.aws.s3_object:
+    bucket: "{{ snapshot_s3_bucket }}"
+    object: "{{ snapshot_s3_prefix }}/{{ snapshot_filename }}"
+    src: "{{ snapshot_local_staging_dir }}/{{ snapshot_filename }}"
+    mode: put
+    region: "{{ snapshot_s3_region }}"
+    endpoint_url: "{{ snapshot_s3_endpoint_url | default(omit) }}"
+    access_key: "{{ snapshot_s3_access_key | default(omit) }}"
+    secret_key: "{{ snapshot_s3_secret_key | default(omit) }}"
+  when: snapshot_s3_enabled | bool
+
+- name: "Backup | Upload snapshot manifest to S3"
+  amazon.aws.s3_object:
+    bucket: "{{ snapshot_s3_bucket }}"
+    object: "{{ snapshot_s3_prefix }}/{{ snapshot_filename }}.manifest.json"
+    src: "{{ snapshot_local_staging_dir }}/{{ snapshot_filename }}.manifest.json"
+    mode: put
+    region: "{{ snapshot_s3_region }}"
+    endpoint_url: "{{ snapshot_s3_endpoint_url | default(omit) }}"
+    access_key: "{{ snapshot_s3_access_key | default(omit) }}"
+    secret_key: "{{ snapshot_s3_secret_key | default(omit) }}"
+  when: snapshot_s3_enabled | bool
+
+- name: "Backup | List existing S3 snapshots for pruning"
+  amazon.aws.s3_object:
+    bucket: "{{ snapshot_s3_bucket }}"
+    prefix: "{{ snapshot_s3_prefix }}/{{ snapshot_node_type }}_block"
+    mode: list
+    region: "{{ snapshot_s3_region }}"
+    endpoint_url: "{{ snapshot_s3_endpoint_url | default(omit) }}"
+    access_key: "{{ snapshot_s3_access_key | default(omit) }}"
+    secret_key: "{{ snapshot_s3_secret_key | default(omit) }}"
+  register: snapshot_s3_object_list
+  when: snapshot_s3_enabled | bool
+
+- name: "Backup | Identify S3 snapshots to delete (beyond retention count)"
+  ansible.builtin.set_fact:
+    snapshot_s3_snapshots_to_delete: >-
+      {{ (snapshot_s3_object_list.s3_keys | default([]) | select('match', '.*\\.tar\\.zst$') | sort)[:-snapshot_s3_retention_count]
+         if (snapshot_s3_object_list.s3_keys | default([]) | select('match', '.*\\.tar\\.zst$') | list | length) > (snapshot_s3_retention_count | int)
+         else [] }}
+  when: snapshot_s3_enabled | bool
+
+- name: "Backup | Delete old S3 snapshots beyond retention"
+  amazon.aws.s3_object:
+    bucket: "{{ snapshot_s3_bucket }}"
+    object: "{{ item }}"
+    mode: delobj
+    region: "{{ snapshot_s3_region }}"
+    endpoint_url: "{{ snapshot_s3_endpoint_url | default(omit) }}"
+    access_key: "{{ snapshot_s3_access_key | default(omit) }}"
+    secret_key: "{{ snapshot_s3_secret_key | default(omit) }}"
+  loop: "{{ snapshot_s3_snapshots_to_delete | default([]) }}"
+  when: snapshot_s3_enabled | bool
+
+# ---- Local staging cleanup ----
+- name: "Backup | Prune old local staging snapshots"
+  ansible.builtin.shell: |
+    set -o pipefail
+    ls -t {{ snapshot_local_staging_dir }}/{{ snapshot_node_type }}_block*.tar.zst 2>/dev/null \
+    | tail -n +{{ (snapshot_keep_local_count | int) + 1 }} \
+    | xargs -r rm -f --
+  args:
+    executable: /bin/bash
+  register: snapshot_local_prune_result
+  changed_when: snapshot_local_prune_result.stdout | length > 0

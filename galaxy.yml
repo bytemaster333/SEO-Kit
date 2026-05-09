@@ -1,0 +1,27 @@
+namespace: starknet_ops
+name: node_toolkit
+version: 0.1.0
+readme: README.md
+authors:
+  - bytemaster333
+description: >
+  Enterprise-grade Ansible Collection for Starknet node operations.
+  Recovery-first and Observability-native design: reorg-aware snapshots,
+  L1-L2 divergence health checks, and OS hardening out of the box.
+license:
+  - Apache-2.0
+tags:
+  - starknet
+  - blockchain
+  - pathfinder
+  - juno
+  - infrastructure
+  - hardening
+  - devops
+repository: https://github.com/bytemaster333/SEO-Kit
+documentation: https://github.com/bytemaster333/SEO-Kit/blob/main/README.md
+issues: https://github.com/bytemaster333/SEO-Kit/issues
+dependencies:
+  community.general: ">=7.0.0"
+  ansible.posix: ">=1.5.0"
+  amazon.aws: ">=7.0.0"

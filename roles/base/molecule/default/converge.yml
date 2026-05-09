@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  tasks:
+    - name: Include base role
+      ansible.builtin.include_role:
+        name: starknet_ops.node_toolkit.base

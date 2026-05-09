@@ -1,0 +1,96 @@
+---
+- name: Verify base role
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # ---- Service users ----
+    - name: "Verify | pathfinder user exists"
+      ansible.builtin.getent:
+        database: passwd
+        key: pathfinder
+      register: base_pf_user_entry
+
+    - name: "Verify | pathfinder user shell is nologin"
+      ansible.builtin.assert:
+        that:
+          - base_pf_user_entry.ansible_facts.getent_passwd['pathfinder'][5] == '/usr/sbin/nologin'
+        fail_msg: "pathfinder user shell is not /usr/sbin/nologin"
+
+    - name: "Verify | juno user exists"
+      ansible.builtin.getent:
+        database: passwd
+        key: juno
+      register: base_juno_user_entry
+
+    - name: "Verify | juno user shell is nologin"
+      ansible.builtin.assert:
+        that:
+          - base_juno_user_entry.ansible_facts.getent_passwd['juno'][5] == '/usr/sbin/nologin'
+        fail_msg: "juno user shell is not /usr/sbin/nologin"
+
+    - name: "Verify | pathfinder home directory exists"
+      ansible.builtin.stat:
+        path: /var/lib/pathfinder
+      register: base_pf_home
+
+    - name: "Verify | pathfinder home directory is owned correctly"
+      ansible.builtin.assert:
+        that:
+          - base_pf_home.stat.exists
+          - base_pf_home.stat.pw_name == 'pathfinder'
+
+    # ---- sysctl ----
+    - name: "Verify | kernel.randomize_va_space is 2 (ASLR enabled)"
+      ansible.builtin.command: sysctl -n kernel.randomize_va_space
+      register: base_kaslr_val
+      changed_when: false
+
+    - name: "Verify | assert ASLR value"
+      ansible.builtin.assert:
+        that:
+          - base_kaslr_val.stdout | trim == '2'
+
+    - name: "Verify | net.ipv4.tcp_syncookies is 1"
+      ansible.builtin.command: sysctl -n net.ipv4.tcp_syncookies
+      register: base_syncookies_val
+      changed_when: false
+
+    - name: "Verify | assert tcp_syncookies value"
+      ansible.builtin.assert:
+        that:
+          - base_syncookies_val.stdout | trim == '1'
+
+    - name: "Verify | sysctl config file is present"
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/90-starknet-hardening.conf
+      register: base_sysctl_conf
+
+    - name: "Verify | assert sysctl file exists"
+      ansible.builtin.assert:
+        that:
+          - base_sysctl_conf.stat.exists
+
+    # ---- ulimits ----
+    - name: "Verify | limits config file is present"
+      ansible.builtin.stat:
+        path: /etc/security/limits.d/90-starknet-services.conf
+      register: base_limits_conf
+
+    - name: "Verify | assert limits file exists"
+      ansible.builtin.assert:
+        that:
+          - base_limits_conf.stat.exists
+
+    # ---- UFW ----
+    - name: "Verify | UFW is active"
+      ansible.builtin.command: ufw status
+      register: base_ufw_status
+      changed_when: false
+
+    - name: "Verify | assert UFW is enabled"
+      ansible.builtin.assert:
+        that:
+          - "'Status: active' in base_ufw_status.stdout"
+        fail_msg: "UFW is not active: {{ base_ufw_status.stdout }}"

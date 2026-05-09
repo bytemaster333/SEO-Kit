@@ -1,0 +1,51 @@
+---
+# ---- Binary / Version ----
+pathfinder_version: "0.14.3"
+# SHA256 checksum of the release tarball — update alongside pathfinder_version
+pathfinder_checksum: ""
+pathfinder_binary_url: >-
+  https://github.com/eqlabs/pathfinder/releases/download/v{{ pathfinder_version }}/pathfinder-{{ pathfinder_version }}-x86_64-unknown-linux-musl.tar.gz
+pathfinder_binary: /usr/local/bin/pathfinder
+
+# ---- Runtime identity ----
+pathfinder_user: pathfinder
+pathfinder_group: pathfinder
+pathfinder_data_dir: /var/lib/pathfinder
+pathfinder_env_dir: /etc/pathfinder
+
+# ---- Network endpoints ----
+pathfinder_rpc_host: "0.0.0.0"
+pathfinder_rpc_port: 9545
+pathfinder_metrics_host: "127.0.0.1"
+pathfinder_metrics_port: 9101
+
+# ---- Starknet network ----
+pathfinder_network: mainnet  # mainnet | sepolia
+
+# ---- L1 Ethereum RPC (REQUIRED — set via vault) ----
+pathfinder_ethereum_url: ""
+
+# ---- systemd service ----
+pathfinder_service_name: pathfinder
+pathfinder_service_state: started
+pathfinder_service_enabled: true
+pathfinder_restart_policy: on-failure
+pathfinder_restart_sec: 10
+
+# ---- L1-L2 divergence health check ----
+pathfinder_health_check_enabled: true
+pathfinder_health_check_timeout: 10
+pathfinder_health_check_retries: 3
+pathfinder_health_check_retry_delay: 5
+# L1 RPC latency above this (ms) emits a warning
+pathfinder_l1_latency_warn_ms: 2000
+# Sync drift = L2 highest known block - L2 current block (only when syncing)
+pathfinder_l1_lag_warn_threshold: 100
+pathfinder_l1_lag_fail_threshold: 500
+
+# ---- UFW rules registered with base role ----
+pathfinder_ufw_allow_rules:
+  - rule: allow
+    port: "{{ pathfinder_rpc_port }}"
+    proto: tcp
+    comment: "Pathfinder HTTP RPC"

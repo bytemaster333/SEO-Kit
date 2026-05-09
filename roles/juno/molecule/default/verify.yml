@@ -1,0 +1,70 @@
+---
+- name: Verify juno role
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "Verify | Juno binary exists and is executable"
+      ansible.builtin.stat:
+        path: /usr/local/bin/juno
+      register: juno_binary
+
+    - name: "Verify | Assert juno binary"
+      ansible.builtin.assert:
+        that:
+          - juno_binary.stat.exists
+          - juno_binary.stat.executable
+
+    - name: "Verify | Juno data directory owned correctly"
+      ansible.builtin.stat:
+        path: /var/lib/juno
+      register: juno_data
+
+    - name: "Verify | Assert juno data dir ownership"
+      ansible.builtin.assert:
+        that:
+          - juno_data.stat.exists
+          - juno_data.stat.pw_name == 'juno'
+
+    - name: "Verify | Juno config file exists with correct permissions"
+      ansible.builtin.stat:
+        path: /etc/juno/juno.yaml
+      register: juno_conf
+
+    - name: "Verify | Assert juno config permissions (0640)"
+      ansible.builtin.assert:
+        that:
+          - juno_conf.stat.exists
+          - juno_conf.stat.mode == '0640'
+
+    - name: "Verify | Juno systemd unit exists"
+      ansible.builtin.stat:
+        path: /etc/systemd/system/juno.service
+      register: juno_unit
+
+    - name: "Verify | Assert juno unit file present"
+      ansible.builtin.assert:
+        that:
+          - juno_unit.stat.exists
+
+    - name: "Verify | Juno service is enabled"  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-enabled juno
+      register: juno_enabled
+      changed_when: false
+
+    - name: "Verify | Assert juno service enabled"
+      ansible.builtin.assert:
+        that:
+          - juno_enabled.stdout | trim == 'enabled'
+
+    - name: "Verify | UFW has juno RPC port rules"  # noqa: command-instead-of-module
+      ansible.builtin.command: ufw status
+      register: juno_ufw_status
+      changed_when: false
+
+    - name: "Verify | Assert juno ports in UFW"
+      ansible.builtin.assert:
+        that:
+          - "'6060' in juno_ufw_status.stdout"
+          - "'6061' in juno_ufw_status.stdout"

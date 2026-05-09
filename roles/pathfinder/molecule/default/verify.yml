@@ -1,0 +1,90 @@
+---
+- name: Verify pathfinder role
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # ---- Binary ----
+    - name: "Verify | Pathfinder binary exists"
+      ansible.builtin.stat:
+        path: /usr/local/bin/pathfinder
+      register: pathfinder_pf_binary
+
+    - name: "Verify | Assert pathfinder binary is executable"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_binary.stat.exists
+          - pathfinder_pf_binary.stat.executable
+        fail_msg: "pathfinder binary not found or not executable at /usr/local/bin/pathfinder"
+
+    # ---- Data directory ----
+    - name: "Verify | Pathfinder data directory exists"
+      ansible.builtin.stat:
+        path: /var/lib/pathfinder
+      register: pathfinder_pf_data_dir
+
+    - name: "Verify | Assert data directory ownership"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_data_dir.stat.exists
+          - pathfinder_pf_data_dir.stat.pw_name == 'pathfinder'
+        fail_msg: "/var/lib/pathfinder is missing or not owned by pathfinder"
+
+    # ---- Environment file ----
+    - name: "Verify | Pathfinder.env file exists"
+      ansible.builtin.stat:
+        path: /etc/pathfinder/pathfinder.env
+      register: pathfinder_pf_env_file
+
+    - name: "Verify | Assert env file has restrictive permissions (0640)"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_env_file.stat.exists
+          - pathfinder_pf_env_file.stat.mode == '0640'
+        fail_msg: "/etc/pathfinder/pathfinder.env missing or has wrong permissions"
+
+    # ---- systemd unit ----
+    - name: "Verify | Pathfinder systemd unit file exists"
+      ansible.builtin.stat:
+        path: /etc/systemd/system/pathfinder.service
+      register: pathfinder_pf_unit
+
+    - name: "Verify | Assert systemd unit file present"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_unit.stat.exists
+
+    - name: "Verify | Pathfinder service is enabled"  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-enabled pathfinder
+      register: pathfinder_pf_enabled
+      changed_when: false
+
+    - name: "Verify | Assert pathfinder service enabled"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_enabled.stdout | trim == 'enabled'
+        fail_msg: "pathfinder service is not enabled: {{ pathfinder_pf_enabled.stdout }}"
+
+    # ---- Inherited base checks ----
+    - name: "Verify | Pathfinder user has nologin shell"
+      ansible.builtin.getent:
+        database: passwd
+        key: pathfinder
+      register: pathfinder_pf_user_entry
+
+    - name: "Verify | Assert pathfinder user shell"
+      ansible.builtin.assert:
+        that:
+          - pathfinder_pf_user_entry.ansible_facts.getent_passwd['pathfinder'][5] == '/usr/sbin/nologin'
+
+    - name: "Verify | UFW has pathfinder RPC port rule"  # noqa: command-instead-of-module
+      ansible.builtin.command: ufw status
+      register: pathfinder_ufw_status
+      changed_when: false
+
+    - name: "Verify | Assert pathfinder RPC port in UFW rules"
+      ansible.builtin.assert:
+        that:
+          - "'9545' in pathfinder_ufw_status.stdout"
+        fail_msg: "UFW rule for port 9545 not found"

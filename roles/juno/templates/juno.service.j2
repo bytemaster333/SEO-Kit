@@ -1,0 +1,43 @@
+# Managed by Ansible — starknet_ops.node_toolkit (juno role)
+[Unit]
+Description=Juno Starknet Full Node
+After=network-online.target
+Wants=network-online.target
+Documentation=https://github.com/NethermindEth/juno
+
+[Service]
+Type=simple
+User={{ juno_user }}
+Group={{ juno_group }}
+WorkingDirectory={{ juno_data_dir }}
+
+ExecStart={{ juno_binary }} \
+    --config {{ juno_config_dir }}/juno.yaml
+
+Restart={{ juno_restart_policy }}
+RestartSec={{ juno_restart_sec }}
+TimeoutStopSec=120
+
+# systemd security hardening
+NoNewPrivileges={{ base_systemd_hardening.NoNewPrivileges | default('yes') }}
+PrivateTmp={{ base_systemd_hardening.PrivateTmp | default('yes') }}
+ProtectSystem={{ base_systemd_hardening.ProtectSystem | default('full') }}
+ProtectHome={{ base_systemd_hardening.ProtectHome | default('yes') }}
+ReadWritePaths={{ juno_data_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictNamespaces=yes
+LockPersonality=yes
+# Go runtime is safe from W^X violations
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=juno
+
+[Install]
+WantedBy=multi-user.target

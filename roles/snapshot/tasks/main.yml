@@ -1,0 +1,15 @@
+---
+- name: "Snapshot | Run reorg-aware chain verification"
+  ansible.builtin.import_tasks: reorg_check.yml
+  when: snapshot_mode == 'backup'
+  tags: [snapshot, reorg_check]
+
+- name: "Snapshot | Execute backup"
+  ansible.builtin.import_tasks: backup.yml
+  when: snapshot_mode == 'backup'
+  tags: [snapshot, backup]
+
+- name: "Snapshot | Execute restore"
+  ansible.builtin.import_tasks: restore.yml
+  when: snapshot_mode == 'restore'
+  tags: [snapshot, restore]

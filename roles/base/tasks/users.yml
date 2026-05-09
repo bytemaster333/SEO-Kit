@@ -1,0 +1,35 @@
+---
+- name: "Users | Create service groups"
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    system: true
+    state: present
+  loop: "{{ base_service_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Users | Create service users (non-root, nologin)"
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.name }}"
+    groups: "{{ item.groups | default([]) }}"
+    home: "{{ item.home }}"
+    shell: "{{ item.shell | default('/usr/sbin/nologin') }}"
+    system: true
+    create_home: true
+    password_lock: true
+    state: present
+  loop: "{{ base_service_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Users | Set home directory ownership and permissions"
+  ansible.builtin.file:
+    path: "{{ item.home }}"
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0750"
+    state: directory
+  loop: "{{ base_service_users }}"
+  loop_control:
+    label: "{{ item.name }}"

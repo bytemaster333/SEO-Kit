@@ -1,0 +1,42 @@
+---
+- name: "Pathfinder | Validate required variables"
+  ansible.builtin.assert:
+    that:
+      - pathfinder_ethereum_url | length > 0
+    fail_msg: >
+      pathfinder_ethereum_url is required but not set.
+      Provide the L1 Ethereum RPC URL via inventory group_vars
+      or an ansible-vault encrypted vars file.
+  tags: [pathfinder, validate]
+
+# UFW rules are applied directly here (not via base role) so the role is
+# self-contained: it works whether base ran before, after, or not at all.
+# UFW is idempotent — re-applying the same rule produces no change.
+- name: "Pathfinder | Apply UFW rules for RPC ports"
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    src: "{{ item.src | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ pathfinder_ufw_allow_rules }}"
+  loop_control:
+    label: "{{ item.comment | default(item.port) }}"
+  tags: [pathfinder, firewall]
+
+- name: "Pathfinder | Install binary"
+  ansible.builtin.import_tasks: install.yml
+  tags: [pathfinder, install]
+
+- name: "Pathfinder | Configure environment"
+  ansible.builtin.import_tasks: configure.yml
+  tags: [pathfinder, configure]
+
+- name: "Pathfinder | Deploy and start systemd service"
+  ansible.builtin.import_tasks: service.yml
+  tags: [pathfinder, systemd]
+
+- name: "Pathfinder | Run L1-L2 health check"
+  ansible.builtin.import_tasks: l1_health_check.yml
+  when: pathfinder_health_check_enabled | bool
+  tags: [pathfinder, health]

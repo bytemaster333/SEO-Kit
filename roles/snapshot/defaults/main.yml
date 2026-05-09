@@ -1,0 +1,44 @@
+---
+# ---- Target node ----
+snapshot_node_type: pathfinder  # pathfinder | juno
+snapshot_rpc_port: "{{ pathfinder_rpc_port | default(9545) }}"
+snapshot_data_dir: "{{ pathfinder_data_dir | default('/var/lib/pathfinder') }}"
+snapshot_service_name: "{{ pathfinder_service_name | default('pathfinder') }}"
+
+# ---- Reorg detection ----
+# Number of recent blocks to verify for chain continuity
+snapshot_reorg_check_depth: 10
+# Abort if any block has status outside accepted list
+snapshot_reorg_abort_on_non_accepted: true
+snapshot_accepted_statuses:
+  - ACCEPTED_ON_L2
+  - ACCEPTED_ON_L1
+# RPC robustness — retries protect against transient node hiccups
+snapshot_rpc_timeout: 15
+snapshot_rpc_retries: 3
+snapshot_rpc_retry_delay: 5
+
+# ---- Snapshot storage — local staging ----
+snapshot_local_staging_dir: /var/backups/starknet/staging
+snapshot_keep_local_count: 1  # only keep latest locally
+
+# ---- S3 / Object Storage ----
+snapshot_s3_enabled: false
+snapshot_s3_bucket: ""
+snapshot_s3_prefix: "snapshots/mainnet"
+snapshot_s3_region: "eu-central-1"
+snapshot_s3_endpoint_url: ""        # MinIO or compatible; empty = AWS S3
+snapshot_s3_retention_count: 5      # number of snapshots to retain in S3
+# IMPORTANT: store credentials in ansible-vault — never commit plain text
+# snapshot_s3_access_key: "{{ vault_snapshot_s3_access_key }}"
+# snapshot_s3_secret_key: "{{ vault_snapshot_s3_secret_key }}"
+
+# ---- Cron scheduling ----
+snapshot_cron_enabled: true
+snapshot_cron_hour: "3"
+snapshot_cron_minute: "0"
+snapshot_cron_user: root
+
+# ---- Operation mode (set by playbook) ----
+snapshot_mode: backup  # backup | restore
+snapshot_restore_target: latest   # 'latest' or specific filename

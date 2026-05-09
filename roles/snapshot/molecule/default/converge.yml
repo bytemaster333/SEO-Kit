@@ -1,0 +1,41 @@
+---
+# The snapshot role's reorg_check requires a running node with real RPC.
+# In Molecule we test the non-reorg-check path: backup archive creation logic.
+- name: Converge (snapshot — structure and archive tests only)
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure zstd is available
+      ansible.builtin.package:
+        name: zstd
+        state: present
+        update_cache: true
+
+    - name: Ensure local staging dir exists
+      ansible.builtin.file:
+        path: /tmp/snapshot-test
+        state: directory
+        mode: "0755"
+
+    - name: Test archive creation (simulates backup.yml archive step)  # noqa: command-instead-of-module
+      ansible.builtin.command: >
+        tar
+        --use-compress-program='zstd -T0 -3'
+        -cf /tmp/snapshot-test/test_snapshot.tar.zst
+        -C /var/lib
+        pathfinder
+      args:
+        creates: /tmp/snapshot-test/test_snapshot.tar.zst
+
+    - name: Verify archive can be decompressed  # noqa: command-instead-of-module
+      ansible.builtin.command: >
+        tar
+        --use-compress-program='zstd -d'
+        -tf /tmp/snapshot-test/test_snapshot.tar.zst
+      register: snapshot_tarlist
+      changed_when: false
+
+    - name: Assert archive contains expected path
+      ansible.builtin.assert:
+        that:
+          - "'pathfinder' in snapshot_tarlist.stdout"

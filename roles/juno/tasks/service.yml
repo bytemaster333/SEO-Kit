@@ -1,0 +1,21 @@
+---
+- name: "Service | Deploy juno systemd unit"
+  ansible.builtin.template:
+    src: juno.service.j2
+    dest: /etc/systemd/system/juno.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: juno_unit_file
+  notify: restart juno
+
+- name: "Service | Reload systemd daemon"  # noqa: no-handler
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: juno_unit_file is changed
+
+- name: "Service | Enable and start juno"
+  ansible.builtin.systemd:
+    name: "{{ juno_service_name }}"
+    state: "{{ juno_service_state }}"
+    enabled: "{{ juno_service_enabled }}"

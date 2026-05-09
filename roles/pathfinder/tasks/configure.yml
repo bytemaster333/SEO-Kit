@@ -1,0 +1,17 @@
+---
+- name: "Configure | Ensure /etc/pathfinder config directory exists"
+  ansible.builtin.file:
+    path: "{{ pathfinder_env_dir }}"
+    owner: root
+    group: "{{ pathfinder_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Configure | Deploy environment file (contains L1 RPC URL)"
+  ansible.builtin.template:
+    src: pathfinder.env.j2
+    dest: "{{ pathfinder_env_dir }}/pathfinder.env"
+    owner: root
+    group: "{{ pathfinder_group }}"
+    mode: "0640"
+  notify: restart pathfinder

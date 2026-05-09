@@ -1,0 +1,6 @@
+---
+# offline: true prevents ansible-lint from auto-installing collections via Galaxy,
+# including auto-installing the project itself when galaxy.yml is detected.
+# Collections must be pre-installed before linting:
+#   ansible-galaxy collection install -r requirements.yml
+offline: true

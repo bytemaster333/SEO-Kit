@@ -1,0 +1,21 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for systemd to become ready  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-system-running
+      register: juno_systemd_status
+      retries: 12
+      delay: 5
+      until: juno_systemd_status.stdout in ['running', 'degraded']
+      changed_when: false
+      failed_when: false
+
+    - name: Create stub juno binary (skips binary download in molecule)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/juno
+        content: |
+          #!/bin/sh
+          echo "0.12.5"
+        mode: "0755"

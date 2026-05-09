@@ -1,0 +1,5 @@
+# Managed by Ansible — starknet_ops.node_toolkit (base role)
+# DO NOT EDIT MANUALLY — changes will be overwritten on next run
+{% for key, value in base_sysctl_settings.items() %}
+{{ key }} = {{ value }}
+{% endfor %}

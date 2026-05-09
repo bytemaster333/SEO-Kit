@@ -1,0 +1,18 @@
+---
+# Example inventory — copy to hosts.yml and customize
+# IMPORTANT: hosts.yml is gitignored — never commit real hostnames/IPs
+
+all:
+  children:
+    starknet_nodes:
+      children:
+        pathfinder_nodes:
+          hosts:
+            pathfinder-1.example.com:
+              ansible_user: ubuntu
+              ansible_ssh_private_key_file: ~/.ssh/starknet_key
+        juno_nodes:
+          hosts:
+            juno-1.example.com:
+              ansible_user: ubuntu
+              ansible_ssh_private_key_file: ~/.ssh/starknet_key

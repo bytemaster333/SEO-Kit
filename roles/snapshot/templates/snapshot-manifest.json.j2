@@ -1,0 +1,11 @@
+{
+  "node_type": "{{ snapshot_node_type }}",
+  "block_number": {{ snapshot_verified_block_num }},
+  "block_hash": "{{ snapshot_verified_block_hash }}",
+  "filename": "{{ snapshot_filename }}",
+  "created_at": "{{ ansible_date_time.iso8601 }}",
+  "hostname": "{{ inventory_hostname }}",
+  "reorg_check_depth": {{ snapshot_reorg_check_depth }},
+  "s3_bucket": "{{ snapshot_s3_bucket if snapshot_s3_enabled else '' }}",
+  "s3_key": "{{ snapshot_s3_prefix + '/' + snapshot_filename if snapshot_s3_enabled else '' }}"
+}

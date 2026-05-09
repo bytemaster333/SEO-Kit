@@ -1,0 +1,20 @@
+# Managed by Ansible — starknet_ops.node_toolkit (juno role)
+# Juno configuration file
+db-path: {{ juno_data_dir }}
+network: {{ juno_network }}
+eth-node: {{ juno_ethereum_url }}
+
+http: {{ juno_http_enabled | lower }}
+http-host: {{ juno_http_host }}
+http-port: {{ juno_http_port }}
+
+ws: {{ juno_ws_enabled | lower }}
+ws-host: {{ juno_ws_host }}
+ws-port: {{ juno_ws_port }}
+
+metrics: {{ juno_metrics_enabled | lower }}
+metrics-host: {{ juno_metrics_host }}
+metrics-port: {{ juno_metrics_port }}
+
+p2p: {{ juno_p2p_enabled | lower }}
+p2p-tcp-port: {{ juno_p2p_port }}

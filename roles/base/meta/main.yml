@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: base
+  author: starknet_ops
+  description: OS hardening for Starknet node hosts (sysctl, ulimits, UFW, service users)
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - hardening
+    - sysctl
+    - ufw
+    - security
+    - starknet
+
+dependencies: []

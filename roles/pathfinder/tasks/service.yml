@@ -1,0 +1,21 @@
+---
+- name: "Service | Deploy pathfinder systemd unit"
+  ansible.builtin.template:
+    src: pathfinder.service.j2
+    dest: /etc/systemd/system/pathfinder.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: pathfinder_unit_file
+  notify: restart pathfinder
+
+- name: "Service | Reload systemd daemon"  # noqa: no-handler
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: pathfinder_unit_file is changed
+
+- name: "Service | Enable and start pathfinder"
+  ansible.builtin.systemd:
+    name: "{{ pathfinder_service_name }}"
+    state: "{{ pathfinder_service_state }}"
+    enabled: "{{ pathfinder_service_enabled }}"

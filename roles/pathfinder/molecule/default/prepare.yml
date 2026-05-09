@@ -1,0 +1,21 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for systemd to become ready  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-system-running
+      register: pathfinder_systemd_status
+      retries: 12
+      delay: 5
+      until: pathfinder_systemd_status.stdout in ['running', 'degraded']
+      changed_when: false
+      failed_when: false
+
+    - name: Create stub pathfinder binary (skips 300MB GitHub download in molecule)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/pathfinder
+        content: |
+          #!/bin/sh
+          echo "pathfinder 0.14.3"
+        mode: "0755"

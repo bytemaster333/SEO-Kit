@@ -1,0 +1,14 @@
+---
+# Juno-specific group vars — copy to juno_nodes.yml
+
+juno_version: "0.12.5"
+juno_network: mainnet
+juno_http_port: 6060
+juno_ws_port: 6061
+juno_metrics_port: 9090
+juno_health_check_enabled: true
+
+snapshot_node_type: juno
+snapshot_rpc_port: "{{ juno_http_port }}"
+snapshot_data_dir: "{{ juno_data_dir }}"
+snapshot_service_name: "{{ juno_service_name }}"

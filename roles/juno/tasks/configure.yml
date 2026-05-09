@@ -1,0 +1,17 @@
+---
+- name: "Configure | Ensure /etc/juno config directory exists"
+  ansible.builtin.file:
+    path: "{{ juno_config_dir }}"
+    owner: root
+    group: "{{ juno_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Configure | Deploy Juno configuration file"
+  ansible.builtin.template:
+    src: juno.yaml.j2
+    dest: "{{ juno_config_dir }}/juno.yaml"
+    owner: root
+    group: "{{ juno_group }}"
+    mode: "0640"
+  notify: restart juno

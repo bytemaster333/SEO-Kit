@@ -1,0 +1,32 @@
+---
+# Main orchestration playbook
+# Usage:
+#   ansible-playbook playbooks/site.yml \
+#     -i inventory/hosts.yml \
+#     -e @inventory/group_vars/vault.yml \
+#     --vault-id default@prompt \
+#     --limit pathfinder_nodes
+
+- name: Apply OS hardening to all Starknet node hosts
+  hosts: starknet_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: starknet_ops.node_toolkit.base
+      tags: [base, hardening]
+
+- name: Deploy Pathfinder nodes
+  hosts: pathfinder_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: starknet_ops.node_toolkit.pathfinder
+      tags: [pathfinder]
+
+- name: Deploy Juno nodes
+  hosts: juno_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: starknet_ops.node_toolkit.juno
+      tags: [juno]

@@ -1,0 +1,73 @@
+---
+# Restore from local staging or S3 snapshot
+# snapshot_restore_target: 'latest' or specific filename (without path)
+
+- name: "Restore | Ensure service is stopped before restore"
+  ansible.builtin.systemd:
+    name: "{{ snapshot_service_name }}"
+    state: stopped
+
+- name: "Restore | Find available local snapshots"
+  ansible.builtin.find:
+    paths: "{{ snapshot_local_staging_dir }}"
+    patterns: "{{ snapshot_node_type }}_block*.tar.zst"
+    file_type: file
+  register: snapshot_local_snapshots
+
+- name: "Restore | Select snapshot to restore (latest or specified)"
+  ansible.builtin.set_fact:
+    snapshot_restore_filename: >-
+      {{ (snapshot_local_snapshots.files | sort(attribute='mtime') | last).path | basename
+         if snapshot_restore_target == 'latest' and snapshot_local_snapshots.files | length > 0
+         else snapshot_restore_target }}
+
+- name: "Restore | Download snapshot from S3 if not available locally"
+  amazon.aws.s3_object:
+    bucket: "{{ snapshot_s3_bucket }}"
+    object: "{{ snapshot_s3_prefix }}/{{ snapshot_restore_filename }}"
+    dest: "{{ snapshot_local_staging_dir }}/{{ snapshot_restore_filename }}"
+    mode: get
+    region: "{{ snapshot_s3_region }}"
+    endpoint_url: "{{ snapshot_s3_endpoint_url | default(omit) }}"
+    access_key: "{{ snapshot_s3_access_key | default(omit) }}"
+    secret_key: "{{ snapshot_s3_secret_key | default(omit) }}"
+  when:
+    - snapshot_s3_enabled | bool
+    - snapshot_restore_filename not in (snapshot_local_snapshots.files | map(attribute='path') | map('basename') | list)
+
+- name: "Restore | Remove existing data directory contents"
+  ansible.builtin.file:
+    path: "{{ snapshot_data_dir }}"
+    state: absent
+
+- name: "Restore | Recreate data directory with correct ownership"
+  ansible.builtin.file:
+    path: "{{ snapshot_data_dir }}"
+    owner: "{{ snapshot_node_type }}"
+    group: "{{ snapshot_node_type }}"
+    mode: "0750"
+    state: directory
+
+- name: "Restore | Extract snapshot archive"  # noqa: command-instead-of-module
+  ansible.builtin.command: >
+    tar
+    --use-compress-program='zstd -d'
+    -xf {{ snapshot_local_staging_dir }}/{{ snapshot_restore_filename }}
+    -C {{ snapshot_data_dir | dirname }}
+  changed_when: true
+
+- name: "Restore | Fix data directory ownership after extraction"
+  ansible.builtin.file:
+    path: "{{ snapshot_data_dir }}"
+    owner: "{{ snapshot_node_type }}"
+    group: "{{ snapshot_node_type }}"
+    recurse: true
+
+- name: "Restore | Start node service"
+  ansible.builtin.systemd:
+    name: "{{ snapshot_service_name }}"
+    state: started
+
+- name: "Restore | Report restore completion"
+  ansible.builtin.debug:
+    msg: "Node {{ snapshot_service_name }} restored from snapshot: {{ snapshot_restore_filename }}"

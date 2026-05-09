@@ -1,0 +1,105 @@
+---
+# Service users created and managed by this role
+base_service_users:
+  - name: pathfinder
+    shell: /usr/sbin/nologin
+    home: /var/lib/pathfinder
+    groups: []
+  - name: juno
+    shell: /usr/sbin/nologin
+    home: /var/lib/juno
+    groups: []
+
+# Kernel sysctl hardening + performance tunables
+base_sysctl_settings:
+  kernel.randomize_va_space: 2
+  fs.protected_hardlinks: 1
+  fs.protected_symlinks: 1
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  # Performance tunables for high-throughput node operation
+  net.core.somaxconn: 65535
+  net.ipv4.tcp_max_syn_backlog: 65535
+  net.core.netdev_max_backlog: 65535
+  vm.swappiness: 10
+
+# ulimits for service users (nofile + nproc)
+base_ulimits:
+  - domain: pathfinder
+    limit_type: soft
+    limit_item: nofile
+    value: 65535
+  - domain: pathfinder
+    limit_type: hard
+    limit_item: nofile
+    value: 65535
+  - domain: pathfinder
+    limit_type: soft
+    limit_item: nproc
+    value: 4096
+  - domain: pathfinder
+    limit_type: hard
+    limit_item: nproc
+    value: 4096
+  - domain: juno
+    limit_type: soft
+    limit_item: nofile
+    value: 65535
+  - domain: juno
+    limit_type: hard
+    limit_item: nofile
+    value: 65535
+  - domain: juno
+    limit_type: soft
+    limit_item: nproc
+    value: 4096
+  - domain: juno
+    limit_type: hard
+    limit_item: nproc
+    value: 4096
+
+# UFW firewall defaults
+base_ufw_default_incoming: deny
+base_ufw_default_outgoing: allow
+base_ufw_logging: "on"
+
+# Base UFW rules — consuming roles append to base_ufw_extra_rules
+base_ufw_rules:
+  - rule: limit
+    port: "22"
+    proto: tcp
+    comment: "SSH rate-limited"
+
+# Consuming roles (pathfinder, juno) populate this list via set_fact
+base_ufw_extra_rules: []
+
+# Packages to ensure present before applying other tasks
+base_required_packages:
+  - ufw
+  - curl
+  - wget
+  - gnupg
+  - apt-transport-https
+  - ca-certificates
+  - python3-pip
+  - unzip
+  - logrotate
+  - zstd
+  - rsync
+
+base_optional_packages: []
+
+# systemd hardening defaults — individual service roles can override per-unit
+base_systemd_hardening:
+  NoNewPrivileges: "yes"
+  PrivateTmp: "yes"
+  ProtectSystem: "full"
+  ProtectHome: "yes"

@@ -1,0 +1,23 @@
+---
+# Global defaults — copy to all.yml and populate sensitive values in vault.yml
+# IMPORTANT: all.yml is gitignored
+
+# L1 Ethereum RPC — MUST come from vault, not plain text here
+# pathfinder_ethereum_url: "{{ vault_ethereum_url }}"
+# juno_ethereum_url: "{{ vault_ethereum_url }}"
+
+# Health check thresholds
+pathfinder_l1_lag_warn_threshold: 100
+pathfinder_l1_lag_fail_threshold: 500
+juno_l1_lag_warn_threshold: 100
+juno_l1_lag_fail_threshold: 500
+
+# Snapshot configuration
+snapshot_s3_enabled: true
+snapshot_s3_bucket: "my-starknet-snapshots"
+snapshot_s3_prefix: "snapshots/mainnet"
+snapshot_s3_region: "eu-central-1"
+snapshot_s3_keep_count: 5
+# snapshot_s3_access_key and snapshot_s3_secret_key come from vault:
+# snapshot_s3_access_key: "{{ vault_s3_access_key }}"
+# snapshot_s3_secret_key: "{{ vault_s3_secret_key }}"

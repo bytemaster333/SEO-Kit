@@ -1,0 +1,71 @@
+---
+# Crisis recovery playbook — restores from latest healthy snapshot
+#
+# Usage:
+#   ansible-playbook playbooks/recover.yml \
+#     -i inventory/hosts.yml \
+#     -e @inventory/group_vars/vault.yml \
+#     --vault-id default@prompt \
+#     -e "recovery_node=pathfinder-1.example.com" \
+#     -e "snapshot_node_type=pathfinder"
+#
+# Optional: specify a snapshot instead of 'latest':
+#   -e "snapshot_restore_target=pathfinder_block1234567_abc123def456_20260423T0300.tar.zst"
+
+- name: Starknet node crisis recovery
+  hosts: "{{ recovery_node | default('pathfinder_nodes') }}"
+  become: true
+  gather_facts: true
+  serial: 1  # One node at a time — never recover all nodes simultaneously
+
+  vars:
+    snapshot_mode: restore
+    snapshot_restore_target: "{{ restore_target | default('latest') }}"
+
+  pre_tasks:
+    - name: "recover | Require explicit operator confirmation"
+      ansible.builtin.pause:
+        prompt: >
+          ╔══════════════════════════════════════════╗
+          ║         STARKNET NODE RECOVERY MODE      ║
+          ╠══════════════════════════════════════════╣
+          ║ Host:     {{ inventory_hostname }}
+          ║ Node:     {{ snapshot_node_type | default('pathfinder') }}
+          ║ Snapshot: {{ snapshot_restore_target }}
+          ║                                          ║
+          ║ WARNING: The node service will be STOPPED║
+          ║ and data will be REPLACED from snapshot. ║
+          ║                                          ║
+          ║ Type YES to proceed, anything else aborts║
+          ╚══════════════════════════════════════════╝
+      register: operator_confirmation
+
+    - name: "recover | Abort if not confirmed"
+      ansible.builtin.fail:
+        msg: "Recovery aborted by operator (confirmation was '{{ operator_confirmation.user_input }}')."
+      when: operator_confirmation.user_input != 'YES'
+
+  roles:
+    - role: starknet_ops.node_toolkit.snapshot
+      tags: [recover, snapshot, restore]
+
+  post_tasks:
+    - name: "recover | Verify node service is running post-restore"
+      ansible.builtin.systemd:
+        name: "{{ snapshot_service_name | default('pathfinder') }}"
+      register: post_restore_service
+
+    - name: "recover | Assert node came back up"
+      ansible.builtin.assert:
+        that:
+          - post_restore_service.status.ActiveState == 'active'
+        fail_msg: >
+          Node service did not start after recovery.
+          Check: journalctl -u {{ snapshot_service_name | default('pathfinder') }} -n 50
+
+    - name: "recover | Report recovery success"
+      ansible.builtin.debug:
+        msg: >
+          Recovery complete. {{ snapshot_service_name | default('pathfinder') }}
+          is running on {{ inventory_hostname }}.
+          Snapshot used: {{ snapshot_restore_target }}
